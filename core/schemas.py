@@ -12,7 +12,3 @@ class ExpenseCreateSchema(ExpenseBaseSchema):
 
 class ExpenseUpdateSchema(ExpenseBaseSchema):
     pass
-
-
-class ExpenseResponseSchema(ExpenseBaseSchema):
-    pass

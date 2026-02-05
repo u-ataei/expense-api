@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Query, HTTPException, status, Path, Body
 from typing import Dict
-from .schemas import ExpenseCreateSchema, ExpenseUpdateSchema, ExpenseResponseSchema
+from .schemas import ExpenseCreateSchema, ExpenseUpdateSchema
 
 app = FastAPI()
 
