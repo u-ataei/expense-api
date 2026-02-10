@@ -1,59 +1,69 @@
-from fastapi import FastAPI, Query, HTTPException, status, Path, Body
-from typing import Dict
+from fastapi import FastAPI, Query, HTTPException, status, Path, Body, Depends
+from contextlib import asynccontextmanager
 from .schemas import ExpenseCreateSchema, ExpenseUpdateSchema
+from core.db import db_init, db_session, Expense
+from sqlalchemy.orm import Session
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    db_init()
+    yield
 
 
-expenses_db: Dict[int, Dict] = {
-    0: {"id": 0, "description": "Cinema", "amount": 5.00},
-    1: {"id": 1, "description": "Hotel", "amount": 120.00}
-}
+app = FastAPI(lifespan=lifespan)
 
 
 @app.get("/expenses", status_code=status.HTTP_200_OK)
-def retrieve_expenses(id: int | None = Query(None)):
-    if id is not None:
-        if id in expenses_db:
-            return expenses_db[id]
+def retrieve_expenses(expense_id: int | None = Query(None), db: Session = Depends(db_session)):
+    existing_expense = db.query(Expense).filter_by(id=expense_id).one_or_none()
+    expenses = db.query(Expense).all()
+    if expense_id is not None:
+        if existing_expense is not None:
+            return existing_expense
         raise HTTPException(
             status_code=404, detail="Expense not found")
-    return expenses_db
+    return expenses
 
 
 @app.post("/expenses", status_code=status.HTTP_201_CREATED)
-def create_expense(create_expense: ExpenseCreateSchema = Body(...)):
-    if create_expense.id in expenses_db:
+def create_expense(expense: ExpenseCreateSchema = Body(...), db: Session = Depends(db_session)):
+    existing_expense = db.query(Expense).filter_by(id=expense.id).one_or_none()
+    if existing_expense is not None:
         raise HTTPException(
-            status_code=409, detail=f"Expense with this ID {create_expense.id} already exists.")
+            status_code=409, detail=f"Expense with this ID {expense.id} already exists.")
 
-    expenses_db[create_expense.id] = {
-        "id": create_expense.id,
-        "description": create_expense.description,
-        "amount": create_expense.amount
-    }
+    new_expense = Expense(id=expense.id, description=expense.description, amount=expense.amount)
+    db.add(new_expense)
+    db.commit()
+    db.refresh(new_expense)
 
-    return expenses_db[create_expense.id]
-
-
-@app.put("/expenses/{id}", status_code=status.HTTP_200_OK)
-def update_expense(id: int = Path(...), update_expense: ExpenseUpdateSchema = Body(...)):
-    if not id in expenses_db:
-        raise HTTPException(
-            status_code=404, detail="Expense not found")
-
-    expenses_db[id]["description"] = update_expense.description
-    expenses_db[id]["amount"] = update_expense.amount
-
-    return expenses_db[id]
+    return new_expense
 
 
-@app.delete("/expenses/{id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_expense(id: int = Path(...)):
-    if not id in expenses_db:
+@app.put("/expenses/{expense_id}", status_code=status.HTTP_200_OK)
+def update_expense(expense_id: int = Path(...), expense: ExpenseUpdateSchema = Body(...),
+                   db: Session = Depends(db_session)):
+    existing_expense = db.query(Expense).filter_by(id=expense_id).one_or_none()
+    if existing_expense is None:
         raise HTTPException(
             status_code=404, detail="Expense not found")
 
-    del expenses_db[id]
+    new_expense = {"description": expense.description, "amount": expense.amount}
+    db.query(Expense).filter_by(id=expense_id).update(new_expense)
+    db.commit()
+
+    return new_expense
+
+
+@app.delete("/expenses/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_expense(expense_id: int = Path(...), db: Session = Depends(db_session)):
+    existing_expense = db.query(Expense).filter_by(id=expense_id).one_or_none()
+    if existing_expense is None:
+        raise HTTPException(
+            status_code=404, detail="Expense not found")
+
+    db.query(Expense).filter_by(id=expense_id).delete()
+    db.commit()
 
     return None
