@@ -3,8 +3,8 @@
 ```mermaid
 erDiagram
     EXPENSE {
-        int id PK "Primary Key"
-        string description
-        float amount
+        id int PK "Primary Key"
+        description string
+        amount float
     }
 ```
